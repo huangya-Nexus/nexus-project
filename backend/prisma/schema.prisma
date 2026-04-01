@@ -1,0 +1,271 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  avatar    String?
+  role      String   @default("USER") // USER, ADMIN, VIP
+  status    String   @default("ACTIVE") // ACTIVE, INACTIVE, BANNED
+  
+  // 配额限制
+  aiQuotaMonthly Int @default(100) // 每月AI调用次数
+  aiQuotaUsed    Int @default(0)
+  graphQuota     Int @default(10)  // 最多创建图谱数
+  
+  // 时间戳
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLoginAt DateTime?
+  
+  // 关联
+  graphs    KnowledgeGraph[]
+  imports   ImportTask[]
+  shares    GraphShare[] // 分享记录
+  reviewCards ReviewCard[] // 复习卡片
+  reviewLogs  ReviewLog[] // 复习记录
+  
+  @@map("users")
+}
+
+// 知识图谱表
+model KnowledgeGraph {
+  id          String @id @default(uuid())
+  title       String
+  description String?
+  tags        String? // JSON string
+  status      String @default("ACTIVE") // ACTIVE, ARCHIVED, DELETED
+  
+  // 统计
+  nodeCount   Int @default(0)
+  edgeCount   Int @default(0)
+  viewCount   Int @default(0)
+  isPublic    Boolean @default(false) // 是否公开
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodes       KnowledgeNode[]
+  edges       KnowledgeEdge[]
+  shares      GraphShare[] // 分享记录
+  reviewCards ReviewCard[] // 复习卡片
+
+  // 索引
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([isPublic])
+  @@index([isPublic, status])
+  @@map("knowledge_graphs")
+}
+
+// 知识点表
+model KnowledgeNode {
+  id          String @id @default(uuid())
+  title       String
+  content     String
+  summary     String? // AI生成的摘要
+  keywords    String? // JSON string
+  
+  // 位置信息 (用于图谱可视化)
+  positionX   Float?
+  positionY   Float?
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联
+  graphId     String
+  graph       KnowledgeGraph @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  
+  // 关联关系
+  sourceEdges KnowledgeEdge[] @relation("SourceNode")
+  targetEdges KnowledgeEdge[] @relation("TargetNode")
+  reviewCards ReviewCard[] // 复习卡片
+  
+  // 索引
+  @@index([graphId])
+  @@index([title])
+  @@map("knowledge_nodes")
+}
+
+// 知识关联表
+model KnowledgeEdge {
+  id          String @id @default(uuid())
+  type        String @default("RELATED") // RELATED, PREREQUISITE, EXTENDS, SIMILAR, CONTRASTS
+  label       String? // 关联标签，如"前提"、"扩展"等
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  
+  // 关联
+  graphId     String
+  graph       KnowledgeGraph @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  
+  sourceId    String
+  source      KnowledgeNode @relation("SourceNode", fields: [sourceId], references: [id], onDelete: Cascade)
+  
+  targetId    String
+  target      KnowledgeNode @relation("TargetNode", fields: [targetId], references: [id], onDelete: Cascade)
+  
+  // 索引
+  @@index([graphId])
+  @@index([sourceId])
+  @@index([targetId])
+  @@unique([sourceId, targetId, type])
+  @@map("knowledge_edges")
+}
+
+// 导入任务表
+model ImportTask {
+  id          String @id @default(uuid())
+  type        String // TEXT, MARKDOWN, PDF, URL, IMAGE
+  status      String @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  
+  // 原始内容
+  filename    String?
+  fileUrl     String?
+  content     String? // 文本内容或URL
+  
+  // AI处理结果
+  result      String? // JSON string
+  error       String?
+  
+  // 配额消耗
+  aiTokensUsed Int @default(0)
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  
+  // 关联
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  graphId     String?
+  
+  @@map("import_tasks")
+}
+
+// 图谱分享表
+model GraphShare {
+  id          String @id @default(uuid())
+  shareToken  String @unique // 分享令牌
+  permission  String @default("read") // read, clone
+  
+  // 统计
+  viewCount   Int @default(0)
+  cloneCount  Int @default(0)
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime // 过期时间
+  
+  // 关联
+  graphId     String
+  graph       KnowledgeGraph @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // 索引
+  @@index([shareToken])
+  @@index([userId])
+  @@index([graphId])
+  @@map("graph_shares")
+}
+
+// 复习卡片表 (类似 Anki)
+model ReviewCard {
+  id          String @id @default(uuid())
+  
+  // 复习状态
+  status      String @default("NEW") // NEW, LEARNING, REVIEW, RELEARNING
+  
+  // SM-2 算法参数
+  easeFactor  Float @default(2.5) // 简易度因子
+  interval    Int @default(0) // 当前间隔天数
+  repetitions Int @default(0) // 连续成功次数
+  
+  // 时间安排
+  dueDate     DateTime // 到期复习时间
+  lastReviewedAt DateTime? // 上次复习时间
+  
+  // 统计
+  reviewCount Int @default(0) // 总复习次数
+  correctCount Int @default(0) // 正确次数
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联
+  nodeId      String
+  node        KnowledgeNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  graphId     String
+  graph       KnowledgeGraph @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  
+  // 复习记录
+  reviewLogs  ReviewLog[]
+  
+  // 索引
+  @@index([userId])
+  @@index([nodeId])
+  @@index([graphId])
+  @@index([dueDate])
+  @@index([userId, dueDate])
+  @@unique([userId, nodeId])
+  @@map("review_cards")
+}
+
+// 复习记录表
+model ReviewLog {
+  id          String @id @default(uuid())
+  
+  // 复习结果
+  rating      Int // 1-4 (1=Again, 2=Hard, 3=Good, 4=Easy)
+  
+  // 复习时的参数
+  easeFactor  Float
+  interval    Int
+  repetitions Int
+  
+  // 用时 (秒)
+  duration    Int?
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  
+  // 关联
+  cardId      String
+  card        ReviewCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // 索引
+  @@index([cardId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("review_logs")
+}

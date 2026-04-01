@@ -1,0 +1,23 @@
+import { ExternalSearchResult } from './externalSearch.js';
+export declare function searchBaiduScholar(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchGoogleScholar(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchCrossRef(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchSemanticScholar(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchCore(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchCNKI(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchWanfang(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchZhihu(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchBilibili(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare function searchDoubanBooks(query: string, limit?: number): Promise<ExternalSearchResult[]>;
+export declare const advancedSearchSources: {
+    baiduScholar: typeof searchBaiduScholar;
+    googleScholar: typeof searchGoogleScholar;
+    crossRef: typeof searchCrossRef;
+    semanticScholar: typeof searchSemanticScholar;
+    core: typeof searchCore;
+    cnki: typeof searchCNKI;
+    wanfang: typeof searchWanfang;
+    zhihu: typeof searchZhihu;
+    bilibili: typeof searchBilibili;
+    doubanBooks: typeof searchDoubanBooks;
+};
