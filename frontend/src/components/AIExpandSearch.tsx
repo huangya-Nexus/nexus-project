@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import KnowledgeGraph from './KnowledgeGraph'
+import FullscreenGraph from './FullscreenGraph'
 
 interface AIExpandSearchProps {
   query: string
@@ -13,7 +14,8 @@ function AIExpandSearch({ query, onClose }: AIExpandSearchProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedNode, setSelectedNode] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'graph' | 'list' | 'path'>('graph')
+  const [activeTab, setActiveTab] = useState<'graph' | 'list' | 'path' | 'fullscreen'>('graph')
+  const [showFullscreen, setShowFullscreen] = useState(false)
 
   useEffect(() => {
     performSearch()
