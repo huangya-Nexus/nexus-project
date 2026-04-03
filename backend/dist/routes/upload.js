@@ -1,159 +1,152 @@
 import { Router } from 'express';
 import multer from 'multer';
-import * as pdfParse from 'pdf-parse';
-import mammoth from 'mammoth';
-import { prisma } from '../lib/db.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 const router = Router();
-// 配置 multer 存储
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (_req, file, cb) => {
-        const uniqueName = `${Date.now()}-${uuidv4()}-${file.originalname}`;
-        cb(null, uniqueName);
-    }
-});
-// 文件过滤器
-const fileFilter = (_req, file, cb) => {
-    const allowedTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'text/plain',
-        'text/markdown'
-    ];
-    if (allowedTypes.includes(file.mimetype)) {
-        cb(null, true);
-    }
-    else {
-        cb(new Error('不支持的文件类型'), false);
-    }
-};
+// 配置 multer 临时存储
 const upload = multer({
-    storage,
-    fileFilter,
+    dest: 'uploads/',
     limits: {
         fileSize: 10 * 1024 * 1024 // 10MB
     }
 });
 // 确保上传目录存在
-import fs from 'fs';
 if (!fs.existsSync('uploads')) {
-    fs.mkdirSync('uploads');
+    fs.mkdirSync('uploads', { recursive: true });
 }
-// 上传文件并解析
+// 动态导入阿里云 OSS（避免类型问题）
+async function createOSSClient() {
+    const region = process.env.ALIYUN_OSS_REGION;
+    const accessKeyId = process.env.ALIYUN_ACCESS_KEY_ID;
+    const accessKeySecret = process.env.ALIYUN_ACCESS_KEY_SECRET;
+    const bucket = process.env.ALIYUN_OSS_BUCKET;
+    if (!region || !accessKeyId || !accessKeySecret || !bucket) {
+        console.log('阿里云 OSS 配置不完整，将使用本地存储');
+        return null;
+    }
+    try {
+        const OSS = (await import('ali-oss')).default;
+        return new OSS({
+            region,
+            accessKeyId,
+            accessKeySecret,
+            bucket,
+            secure: true // 使用 HTTPS
+        });
+    }
+    catch (error) {
+        console.error('初始化 OSS 客户端失败:', error);
+        return null;
+    }
+}
+// 解析文件内容
+async function parseFileContent(filePath, mimeType) {
+    try {
+        // PDF 文件
+        if (mimeType === 'application/pdf') {
+            const dataBuffer = fs.readFileSync(filePath);
+            const pdfParseModule = await import('pdf-parse');
+            const pdfParse = pdfParseModule.default || pdfParseModule;
+            const pdfData = await pdfParse(dataBuffer);
+            return pdfData.text;
+        }
+        // Word 文档
+        if (mimeType === 'application/msword' ||
+            mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            const mammoth = await import('mammoth');
+            const result = await mammoth.extractRawText({ path: filePath });
+            return result.value;
+        }
+        // 文本文件
+        if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
+            return fs.readFileSync(filePath, 'utf-8');
+        }
+        return '不支持的文件类型';
+    }
+    catch (error) {
+        console.error('解析文件失败:', error);
+        throw new Error('文件解析失败');
+    }
+}
+// 上传文件到阿里云 OSS
+async function uploadToOSS(ossClient, filePath, originalName) {
+    if (!ossClient) {
+        return null; // 本地存储模式
+    }
+    try {
+        const timestamp = Date.now();
+        const ext = path.extname(originalName);
+        const ossKey = `uploads/${timestamp}_${Math.random().toString(36).substring(7)}${ext}`;
+        const result = await ossClient.put(ossKey, filePath);
+        return result.url;
+    }
+    catch (error) {
+        console.error('上传到 OSS 失败:', error);
+        return null;
+    }
+}
+// 文件上传接口
 router.post('/:graphId/upload', authMiddleware, upload.single('file'), async (req, res) => {
     try {
-        const graphId = String(req.params.graphId);
-        const userId = String(req.user.userId);
-        if (!req.file) {
+        const { graphId } = req.params;
+        const file = req.file;
+        if (!file) {
             return res.status(400).json({ error: '没有上传文件' });
         }
-        const filePath = req.file.path;
-        const fileName = req.file.originalname;
-        const mimeType = req.file.mimetype;
-        let content = '';
-        // 根据文件类型解析内容
-        try {
-            if (mimeType === 'application/pdf') {
-                // 解析 PDF
-                const dataBuffer = fs.readFileSync(filePath);
-                const pdfData = await pdfParse(dataBuffer);
-                content = pdfData.text;
-            }
-            else if (mimeType === 'application/msword' ||
-                mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                // 解析 Word
-                const result = await mammoth.extractRawText({ path: filePath });
-                content = result.value;
-            }
-            else if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
-                // 读取文本文件
-                content = fs.readFileSync(filePath, 'utf-8');
-            }
-            // 限制内容长度
-            if (content.length > 50000) {
-                content = content.substring(0, 50000) + '...';
-            }
-            // 创建导入任务
-            const task = await prisma.importTask.create({
-                data: {
-                    id: uuidv4(),
-                    type: 'FILE',
-                    status: 'COMPLETED',
-                    filename: fileName,
-                    fileUrl: filePath,
-                    content: content,
-                    userId,
-                    graphId
-                }
-            });
+        // 检查文件类型
+        const allowedTypes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain',
+            'text/markdown'
+        ];
+        if (!allowedTypes.includes(file.mimetype)) {
             // 删除临时文件
-            fs.unlinkSync(filePath);
-            res.json({
-                message: '文件上传成功',
-                taskId: task.id,
-                content: content.substring(0, 1000) + (content.length > 1000 ? '...' : ''),
-                contentLength: content.length
-            });
+            fs.unlinkSync(file.path);
+            return res.status(400).json({ error: '不支持的文件类型' });
         }
-        catch (parseError) {
-            // 删除临时文件
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-            throw parseError;
-        }
+        // 解析文件内容
+        const content = await parseFileContent(file.path, file.mimetype);
+        // 上传到阿里云 OSS（如果配置了）
+        const ossClient = await createOSSClient();
+        const ossUrl = await uploadToOSS(ossClient, file.path, file.originalname);
+        // 删除临时文件
+        fs.unlinkSync(file.path);
+        // 返回结果
+        res.json({
+            success: true,
+            message: '文件上传成功',
+            filename: file.originalname,
+            content: content.slice(0, 5000), // 限制返回内容长度
+            ossUrl, // 阿里云 OSS 地址（如果上传成功）
+            size: file.size
+        });
     }
     catch (error) {
         console.error('文件上传错误:', error);
+        // 清理临时文件
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         res.status(500).json({ error: '文件上传失败' });
     }
 });
-// 获取文件内容
-router.get('/:taskId/content', authMiddleware, async (req, res) => {
-    try {
-        const taskId = req.params.taskId;
-        const userId = req.user.userId;
-        const task = await prisma.importTask.findFirst({
-            where: { id: taskId, userId }
-        });
-        if (!task) {
-            return res.status(404).json({ error: '任务不存在' });
-        }
-        res.json({
-            content: task.content,
-            filename: task.filename
-        });
-    }
-    catch (error) {
-        console.error('获取文件内容错误:', error);
-        res.status(500).json({ error: '获取文件内容失败' });
-    }
-});
-// 删除上传任务
-router.delete('/:taskId', authMiddleware, async (req, res) => {
-    try {
-        const taskId = req.params.taskId;
-        const userId = req.user.userId;
-        const task = await prisma.importTask.findFirst({
-            where: { id: taskId, userId }
-        });
-        if (!task) {
-            return res.status(404).json({ error: '任务不存在' });
-        }
-        await prisma.importTask.delete({
-            where: { id: taskId }
-        });
-        res.json({ message: '删除成功' });
-    }
-    catch (error) {
-        console.error('删除任务错误:', error);
-        res.status(500).json({ error: '删除失败' });
-    }
+// 获取上传配置信息（供前端检查）
+router.get('/config', authMiddleware, async (req, res) => {
+    const ossClient = await createOSSClient();
+    res.json({
+        ossEnabled: !!ossClient,
+        maxFileSize: 10 * 1024 * 1024, // 10MB
+        allowedTypes: [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain',
+            'text/markdown'
+        ]
+    });
 });
 export default router;
 //# sourceMappingURL=upload.js.map

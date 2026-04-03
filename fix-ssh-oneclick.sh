@@ -1,0 +1,48 @@
+#!/bin/bash
+
+echo "=========================================="
+echo "一键修复 SSH 配置（无需 nano）"
+echo "=========================================="
+echo ""
+
+echo "方法 1: 使用 sed 命令直接修改"
+echo "----------------------------------------"
+echo ""
+echo "# 删除所有 Port 配置行"
+echo "sudo sed -i '/^Port/d' /etc/ssh/sshd_config"
+echo "sudo sed -i '/^#Port/d' /etc/ssh/sshd_config"
+echo ""
+echo "# 添加新的 Port 443"
+echo "echo 'Port 443' | sudo tee -a /etc/ssh/sshd_config"
+echo ""
+echo "# 重启 SSH"
+echo "sudo systemctl restart ssh"
+echo ""
+echo "# 验证"
+echo "sudo netstat -tlnp | grep sshd"
+echo ""
+
+echo "=========================================="
+echo "方法 2: 直接复制粘贴执行"
+echo "----------------------------------------"
+echo ""
+echo "复制下面整段命令，一次性粘贴执行:"
+echo ""
+cat << 'EOF'
+sudo sed -i '/^Port/d' /etc/ssh/sshd_config && sudo sed -i '/^#Port/d' /etc/ssh/sshd_config && echo 'Port 443' | sudo tee -a /etc/ssh/sshd_config && sudo systemctl restart ssh && echo "=== 检查端口 ===" && sudo netstat -tlnp | grep sshd
+EOF
+
+echo ""
+echo "=========================================="
+echo "方法 3: 恢复默认 22 端口（放弃改端口）"
+echo "----------------------------------------"
+echo ""
+echo "如果以上都不行，恢复默认:"
+echo ""
+echo "sudo sed -i '/^Port/d' /etc/ssh/sshd_config"
+echo "echo 'Port 22' | sudo tee -a /etc/ssh/sshd_config"
+echo "sudo systemctl restart ssh"
+echo ""
+echo "然后换 WiFi 网络连接服务器"
+echo ""
+echo "=========================================="

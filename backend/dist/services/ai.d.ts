@@ -12,6 +12,7 @@ export interface AIService {
     extractKnowledge(text: string): Promise<KnowledgeNode[]>;
     suggestRelations(nodeA: KnowledgeNode, nodeB: KnowledgeNode): Promise<RelationSuggestion | null>;
     generateSummary(content: string): Promise<string>;
+    generateText(prompt: string): Promise<string>;
 }
 export declare class OpenAIService implements AIService {
     private client;
@@ -19,10 +20,12 @@ export declare class OpenAIService implements AIService {
     extractKnowledge(text: string): Promise<KnowledgeNode[]>;
     suggestRelations(nodeA: KnowledgeNode, nodeB: KnowledgeNode): Promise<RelationSuggestion | null>;
     generateSummary(content: string): Promise<string>;
+    generateText(prompt: string): Promise<string>;
 }
 export declare class MockAIService implements AIService {
     extractKnowledge(text: string): Promise<KnowledgeNode[]>;
     suggestRelations(nodeA: KnowledgeNode, nodeB: KnowledgeNode): Promise<RelationSuggestion | null>;
     generateSummary(content: string): Promise<string>;
+    generateText(prompt: string): Promise<string>;
 }
 export declare function createAIService(): AIService;

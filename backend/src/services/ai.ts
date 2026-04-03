@@ -16,6 +16,7 @@ export interface AIService {
   extractKnowledge(text: string): Promise<KnowledgeNode[]>
   suggestRelations(nodeA: KnowledgeNode, nodeB: KnowledgeNode): Promise<RelationSuggestion | null>
   generateSummary(content: string): Promise<string>
+  generateText(prompt: string): Promise<string>
 }
 
 export class OpenAIService implements AIService {
@@ -133,7 +134,7 @@ ${content}
 
 摘要：` 
 
-    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo'
+    const model = process.env.OPENAI_API_KEY?.includes('moonshot') ? 'moonshot-v1-8k' : (process.env.OPENAI_MODEL || 'gpt-3.5-turbo')
     const response = await this.client.chat.completions.create({
       model,
       messages: [
@@ -142,6 +143,21 @@ ${content}
       ],
       temperature: 0.3,
       max_tokens: 200
+    })
+
+    return response.choices[0]?.message?.content?.trim() || ''
+  }
+
+  async generateText(prompt: string): Promise<string> {
+    const model = process.env.OPENAI_API_KEY?.includes('moonshot') ? 'moonshot-v1-8k' : (process.env.OPENAI_MODEL || 'gpt-3.5-turbo')
+    const response = await this.client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: '你是一个知识图谱专家，擅长生成结构化的知识内容。' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000
     })
 
     return response.choices[0]?.message?.content?.trim() || ''
@@ -182,6 +198,22 @@ export class MockAIService implements AIService {
     await new Promise(resolve => setTimeout(resolve, 500))
     
     return content.slice(0, 100) + '...'
+  }
+
+  async generateText(prompt: string): Promise<string> {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    return `{
+  "coreConcept": "示例概念",
+  "coreDefinition": "这是基于关键词生成的示例定义。",
+  "subConcepts": [
+    {"title": "子概念1", "description": "说明1", "keywords": ["关键词1"]},
+    {"title": "子概念2", "description": "说明2", "keywords": ["关键词2"]}
+  ],
+  "learningPath": [
+    {"step": 1, "title": "步骤1", "description": "学习第一步", "estimatedTime": "30分钟"}
+  ]
+}`
   }
 }
 

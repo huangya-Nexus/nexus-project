@@ -13,6 +13,9 @@ import shareRoutes from './routes/share.js';
 import reviewRoutes from './routes/review.js';
 import searchRoutes from './routes/search.js';
 import externalSearchRoutes from './routes/externalSearch.js';
+import uploadRoutes from './routes/upload.js';
+import enhancedSearchRoutes from './routes/enhancedSearch.js';
+import aiExpandSearchRoutes from './routes/aiExpandSearch.js';
 import { performanceMonitor, rateLimiter } from './middleware/performance.js';
 dotenv.config();
 const app = express();
@@ -49,7 +52,10 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/share', shareRoutes); // 分享功能
 app.use('/api/review', reviewRoutes); // 复习系统
 app.use('/api/search', searchRoutes); // 搜索功能
+app.use('/api/search/enhanced', enhancedSearchRoutes); // 增强版搜索
+app.use('/api/search/ai-expand', aiExpandSearchRoutes); // AI 拓展搜索
 app.use('/api/external', externalSearchRoutes); // 外部搜索
+app.use('/api/upload', uploadRoutes); // 文件上传
 // 图谱子路由（具体路径）
 app.use('/api/graphs', nodeRoutes); // /api/graphs/:graphId/nodes
 app.use('/api/graphs', edgeRoutes); // /api/graphs/:graphId/edges

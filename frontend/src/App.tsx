@@ -5,9 +5,10 @@ import './App.css'
 const Dashboard = lazy(() => import('./Dashboard'))
 const Login = lazy(() => import('./Login'))
 const Register = lazy(() => import('./Register'))
-const SimpleSearch = lazy(() => import('./components/SimpleSearch'))
+const EnhancedSearch = lazy(() => import('./components/EnhancedSearch'))
 const ExternalSearch = lazy(() => import('./components/ExternalSearch'))
 const SimpleGraphSearch = lazy(() => import('./components/SimpleGraphSearch'))
+const AIExpandSearch = lazy(() => import('./components/AIExpandSearch'))
 
 // 加载中组件
 const LoadingFallback = () => (
@@ -34,7 +35,8 @@ function App() {
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [showExternalSearch, setShowExternalSearch] = useState(false)
   const [showGraphSearch, setShowGraphSearch] = useState(false)
-  const [searchMode, setSearchMode] = useState<'local' | 'global' | 'graph'>('local')
+  const [searchMode, setSearchMode] = useState<'local' | 'global' | 'graph' | 'ai'>('local')
+  const [showAIExpandSearch, setShowAIExpandSearch] = useState(false)
 
   // 渲染不同页面
   const renderPage = () => {
@@ -184,6 +186,21 @@ function App() {
                 >
                   🕸️ 知识图谱
                 </button>
+                <button
+                  onClick={() => setSearchMode('ai')}
+                  style={{
+                    padding: '8px 20px',
+                    background: searchMode === 'ai' ? 'white' : 'rgba(255,255,255,0.2)',
+                    color: searchMode === 'ai' ? '#667eea' : 'white',
+                    border: 'none',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: searchMode === 'ai' ? 'bold' : 'normal'
+                  }}
+                >
+                  🤖 AI 拓展
+                </button>
               </div>
 
               {/* 搜索框 */}
@@ -200,7 +217,7 @@ function App() {
                   padding: '0 20px',
                   fontSize: '20px'
                 }}>
-                  {searchMode === 'local' ? '🔍' : searchMode === 'global' ? '🌐' : '🕸️'}
+                  {searchMode === 'local' ? '🔍' : searchMode === 'global' ? '🌐' : searchMode === 'ai' ? '🤖' : '🕸️'}
                 </span>
                 <input
                   type="text"
@@ -212,17 +229,21 @@ function App() {
                         setShowSearchResults(true)
                       } else if (searchMode === 'global') {
                         setShowExternalSearch(true)
+                      } else if (searchMode === 'ai') {
+                        setShowAIExpandSearch(true)
                       } else {
                         setShowGraphSearch(true)
                       }
                     }
                   }}
                   placeholder={
-                    searchMode === 'local' 
-                      ? "搜索本地知识图谱..." 
+                    searchMode === 'local'
+                      ? "搜索本地知识图谱..."
                       : searchMode === 'global'
                         ? "搜索维基百科、arXiv、GitHub等..."
-                        : "输入关键词，查看知识图谱关联..."
+                        : searchMode === 'ai'
+                          ? "输入关键词，AI生成知识网络..."
+                          : "输入关键词，查看知识图谱关联..."
                   }
                   style={{
                     flex: 1,
@@ -239,6 +260,8 @@ function App() {
                         setShowSearchResults(true)
                       } else if (searchMode === 'global') {
                         setShowExternalSearch(true)
+                      } else if (searchMode === 'ai') {
+                        setShowAIExpandSearch(true)
                       } else {
                         setShowGraphSearch(true)
                       }
@@ -250,14 +273,14 @@ function App() {
                     padding: '15px 30px',
                     border: 'none',
                     borderRadius: '50px',
-                    background: searchMode === 'graph' ? '#f59e0b' : searchMode === 'global' ? '#22c55e' : '#667eea',
+                    background: searchMode === 'graph' ? '#f59e0b' : searchMode === 'global' ? '#22c55e' : searchMode === 'ai' ? '#8b5cf6' : '#667eea',
                     color: 'white',
                     fontSize: '16px',
                     cursor: 'pointer',
                     fontWeight: 'bold'
                   }}
                 >
-                  {searchMode === 'local' ? '搜索' : searchMode === 'global' ? '🌐 全网搜索' : '🕸️ 生成知识图谱'}
+                  {searchMode === 'local' ? '搜索' : searchMode === 'global' ? '🌐 全网搜索' : searchMode === 'ai' ? '🤖 AI 拓展' : '🕸️ 生成知识图谱'}
                 </button>
               </div>
 
@@ -292,7 +315,7 @@ function App() {
       {renderPage()}
       <Suspense fallback={<LoadingFallback />}>
         {showSearchResults && searchQuery && (
-          <SimpleSearch
+          <EnhancedSearch
             query={searchQuery}
             onClose={() => setShowSearchResults(false)}
           />
@@ -313,6 +336,13 @@ function App() {
           <SimpleGraphSearch
             query={searchQuery}
             onClose={() => setShowGraphSearch(false)}
+          />
+        )}
+
+        {showAIExpandSearch && searchQuery && (
+          <AIExpandSearch
+            query={searchQuery}
+            onClose={() => setShowAIExpandSearch(false)}
           />
         )}
       </Suspense>
